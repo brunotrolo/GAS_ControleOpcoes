@@ -1170,22 +1170,22 @@ window.CardVencimentos = {
 
           <template v-else>
             <!-- Cabeçalho de colunas -->
-            <div style="display:grid;grid-template-columns:minmax(110px,200px) 1fr 92px;align-items:center;gap:1rem;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
-              <div style="font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Códigos das ações</div>
-              <div style="font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
+            <div style="display:grid;grid-template-columns:120px 1fr 92px;align-items:center;gap:0;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
+              <div style="padding-right:10px;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Ticker</div>
+              <div style="padding-right:16px;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
               <div style="text-align:right;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Preço</div>
             </div>
 
             <!-- Linhas -->
             <div v-for="a in painelAcoes" :key="a.ticker"
-              style="display:grid;grid-template-columns:minmax(110px,200px) 1fr 92px;align-items:center;gap:1rem;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
+              style="display:grid;grid-template-columns:120px 1fr 92px;align-items:center;gap:0;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
               <!-- Ticker + nome -->
-              <div style="min-width:0;">
+              <div style="min-width:0;padding-right:10px;">
                 <div style="font-size:0.82rem;font-weight:800;color:var(--text-primary);letter-spacing:0.01em;">{{ a.ticker }}</div>
                 <div v-if="a.nome" style="font-size:0.62rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.nome }}</div>
               </div>
-              <!-- Sparkline em canvas (ocupa toda a coluna 1fr) -->
-              <div style="min-width:0;height:34px;">
+              <!-- Sparkline em canvas (ocupa toda a coluna 1fr, gap direito de 16px) -->
+              <div style="min-width:0;height:34px;padding-right:16px;">
                 <canvas v-if="a.temGrafico" :id="'sparkcv-' + a.ticker" style="display:block;width:100%;height:34px;"></canvas>
                 <span v-else style="font-size:0.6rem;color:var(--text-muted);">sem histórico</span>
               </div>
