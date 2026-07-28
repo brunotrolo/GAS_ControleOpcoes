@@ -228,6 +228,92 @@ function getHistoricoSpotEstrutura(ticker, desdeISO) {
   }
 }
 
+/**
+ * Painel de Ações (estilo Google Finance) para o CardRadar.
+ * Junta DADOS_ATIVOS (ticker, nome, preço, variação) com a série de
+ * fechamento dos últimos 30 dias (HISTORICO_PRECOS_ATIVOS, motor 020).
+ *
+ * @returns {Array<{ticker,nome,preco,variacao,serie:number[]}>} ordenado por ticker.
+ *
+ * Uma única chamada (sob demanda, quando a subaba é aberta) — não entra no
+ * getAbasPesadas para não pesar a carga principal. A série vai como array de
+ * números (fechamentos ordenados por data), nunca objetos Date.
+ */
+function getPainelAcoes() {
+  try {
+    const ss        = SpreadsheetApp.getActiveSpreadsheet();
+    const abaAtivos = getPlanilhaDinamica(ss, SYS_CONFIG.SHEETS.ASSETS);
+    if (!abaAtivos) return [];
+
+    const lastRow = abaAtivos.getLastRow();
+    const lastCol = abaAtivos.getLastColumn();
+    if (lastRow < 2) return [];
+
+    const headers = abaAtivos.getRange(1, 1, 1, lastCol).getValues()[0];
+    const col = {};
+    headers.forEach(function(h, i) { col[String(h).trim().toUpperCase()] = i; });
+    const cTicker = col['TICKER'], cNome = col['COMPANY_NAME'], cSpot = col['SPOT'], cVar = col['VARIATION'];
+    if (cTicker == null) return [];
+
+    const serieMap = _lerSeries30d(ss);
+    const valores  = abaAtivos.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+    const out = [];
+    valores.forEach(function(row) {
+      const ticker = String(row[cTicker] || '').trim().toUpperCase();
+      if (!ticker || ticker === 'ERRO_API' || ticker === 'N/A') return;
+      out.push({
+        ticker:   ticker,
+        nome:     cNome != null ? String(row[cNome] || '') : '',
+        preco:    cSpot != null ? (parseFloat(row[cSpot]) || 0) : 0,
+        variacao: cVar  != null ? (parseFloat(row[cVar])  || 0) : 0,
+        serie:    serieMap[ticker] || []
+      });
+    });
+
+    out.sort(function(a, b) { return a.ticker.localeCompare(b.ticker); });
+    return out;
+  } catch (e) {
+    console.error('[getPainelAcoes] ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Lê HISTORICO_PRECOS_ATIVOS e devolve { ticker: [fechamento, ...] } com os
+ * últimos 30 dias corridos, ordenado por data crescente.
+ */
+function _lerSeries30d(ss) {
+  const mapa  = {};
+  const sheet = getPlanilhaDinamica(ss, SYS_CONFIG.SHEETS.HIST_PRECOS);
+  if (!sheet) return mapa;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return mapa;
+
+  const corte = new Date();
+  corte.setDate(corte.getDate() - 30);
+  corte.setHours(0, 0, 0, 0);
+  const corteTs = corte.getTime();
+
+  const valores = sheet.getRange(2, 1, lastRow - 1, 3).getValues(); // TICKER | DATA | FECHAMENTO
+  const tmp = {};
+  valores.forEach(function(row) {
+    const t = String(row[0] || '').trim().toUpperCase();
+    const d = row[1];
+    const c = parseFloat(row[2]) || 0;
+    if (!t || !(d instanceof Date) || isNaN(d.getTime()) || d.getTime() < corteTs) return;
+    if (!tmp[t]) tmp[t] = [];
+    tmp[t].push({ ts: d.getTime(), close: c });
+  });
+
+  Object.keys(tmp).forEach(function(t) {
+    tmp[t].sort(function(a, b) { return a.ts - b.ts; });
+    mapa[t] = tmp[t].map(function(x) { return x.close; });
+  });
+  return mapa;
+}
+
 // ==========================================
 // 1c. EXPORTAR CSV (Download de qualquer aba)
 // ==========================================

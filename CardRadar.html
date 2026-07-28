@@ -1157,6 +1157,50 @@ window.CardVencimentos = {
 
         </div>
 
+        <!-- ABA: AÇÕES — lista estilo Google Finance (tickers de DADOS_ATIVOS, 30d) -->
+        <div v-show="abaAtiva === 'acoes'" style="background:var(--surface-base);padding:1rem 1.25rem;">
+
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+            <div style="width:10px;height:10px;border-radius:50%;background:var(--brand-indigo);flex-shrink:0;"></div>
+            <span style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:0.15em;color:var(--text-secondary);">Ações · Tendência 30 dias</span>
+          </div>
+
+          <div v-if="painelAcoesCarregando" style="padding:2rem;text-align:center;color:var(--text-muted);font-size:0.78rem;">Carregando ações...</div>
+          <div v-else-if="painelAcoes.length === 0" style="padding:2rem;text-align:center;color:var(--text-muted);font-size:0.78rem;">Nenhum ativo em DADOS_ATIVOS. Rode o motor de Histórico de Preços.</div>
+
+          <template v-else>
+            <!-- Cabeçalho de colunas -->
+            <div style="display:flex;align-items:center;gap:0.75rem;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
+              <div style="flex:1;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Códigos das ações</div>
+              <div style="width:116px;text-align:center;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
+              <div style="width:88px;text-align:right;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Preço</div>
+            </div>
+
+            <!-- Linhas -->
+            <div v-for="a in painelAcoes" :key="a.ticker"
+              style="display:flex;align-items:center;gap:0.75rem;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
+              <!-- Ticker + nome -->
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:0.82rem;font-weight:800;color:var(--text-primary);letter-spacing:0.01em;">{{ a.ticker }}</div>
+                <div v-if="a.nome" style="font-size:0.62rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.nome }}</div>
+              </div>
+              <!-- Sparkline -->
+              <div style="width:116px;flex-shrink:0;display:flex;justify-content:center;">
+                <svg v-if="a.spark" :viewBox="'0 0 ' + a.spark.W + ' ' + a.spark.H" :width="a.spark.W" :height="a.spark.H" style="display:block;overflow:visible;">
+                  <path :d="a.spark.area" :fill="a.spark.cor" fill-opacity="0.10" stroke="none"></path>
+                  <line x1="0" :y1="a.spark.baseY" :x2="a.spark.W" :y2="a.spark.baseY" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"></line>
+                  <path :d="a.spark.line" fill="none" :stroke="a.spark.cor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"></path>
+                  <circle :cx="a.spark.lastX" :cy="a.spark.lastY" r="2" :fill="a.spark.cor"></circle>
+                </svg>
+                <span v-else style="font-size:0.6rem;color:var(--text-muted);">sem histórico</span>
+              </div>
+              <!-- Preço -->
+              <div style="width:88px;text-align:right;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--text-primary);white-space:nowrap;">{{ fmtPreco(a.preco) }}</div>
+            </div>
+          </template>
+
+        </div>
+
 
         <!-- BLOCO B — CONCENTRACAO POR ATIVO (aba: ativo) -->
         <div v-show="abaAtiva === 'ativo'" style="background:var(--surface-base);padding:1.25rem 1.5rem;">
@@ -1489,8 +1533,12 @@ window.CardRadar = {
         { key: 'calendario', label: 'Calendário' },
         { key: 'moneyness',  label: 'Moneyness' },
         { key: 'lucroPrej',  label: 'Lucro / Prejuízo' },
-        { key: 'notional',   label: 'Notional' }
+        { key: 'notional',   label: 'Notional' },
+        { key: 'acoes',      label: 'Ações' }
       ],
+      painelAcoes:          [],     // [{ticker,nome,preco,variacao,serie,spark}]
+      painelAcoesCarregado: false,
+      painelAcoesCarregando:false,
       drawer: {
         aberto:     false,
         tipo:       '',
@@ -1817,6 +1865,12 @@ window.CardRadar = {
     },
   },
 
+  watch: {
+    abaAtiva: function(nova) {
+      if (nova === 'acoes') this.carregarPainelAcoes();
+    }
+  },
+
   mounted: function() {
     this._initTooltipCR();
   },
@@ -1833,6 +1887,57 @@ window.CardRadar = {
     fmt: function(chave, valor) { return window.Formatador.campo(chave, valor); },
     fmtK: function(n) { return window.Formatador.moedaCompacta(n); },
     fmtMoedaCheia: function(v) { var n = parseFloat(v); if (isNaN(n)) return 'R$ 0'; return 'R$ ' + Math.round(n).toLocaleString('pt-BR'); },
+
+    // Preço com 2 casas (R$ 20,50) para o painel de Ações
+    fmtPreco: function(v) {
+      var n = parseFloat(v);
+      if (isNaN(n)) return '--';
+      return 'R$ ' + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    },
+
+    // ── Painel de Ações (estilo Google Finance) ───────────────────────────
+    carregarPainelAcoes: function() {
+      if (this.painelAcoesCarregado || this.painelAcoesCarregando) return;
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      var self = this;
+      this.painelAcoesCarregando = true;
+      google.script.run
+        .withSuccessHandler(function(dados) {
+          var lista = Array.isArray(dados) ? dados : [];
+          lista.forEach(function(a) { a.spark = self._calcSpark(a.serie); });
+          self.painelAcoes = lista;
+          self.painelAcoesCarregado  = true;
+          self.painelAcoesCarregando = false;
+        })
+        .withFailureHandler(function(err) {
+          self.painelAcoesCarregando = false;
+          console.warn('[CardRadar] Falha ao carregar painel de ações:', err);
+        })
+        .getPainelAcoes();
+    },
+
+    // Geometria de um sparkline SVG a partir da série de fechamentos.
+    _calcSpark: function(serie) {
+      if (!Array.isArray(serie) || serie.length < 2) return null;
+      var W = 116, H = 30, pad = 3, n = serie.length;
+      var min = Math.min.apply(null, serie), max = Math.max.apply(null, serie);
+      var range = (max - min) || 1;
+      var xy = serie.map(function(v, i) {
+        var x = pad + (i / (n - 1)) * (W - 2 * pad);
+        var y = pad + (1 - (v - min) / range) * (H - 2 * pad);
+        return [x, y];
+      });
+      var pts  = xy.map(function(p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' L');
+      var line = 'M' + pts;
+      var area = 'M' + xy[0][0].toFixed(1) + ',' + H + ' L' + pts + ' L' + xy[n - 1][0].toFixed(1) + ',' + H + ' Z';
+      var up   = serie[n - 1] >= serie[0];
+      return {
+        W: W, H: H, line: line, area: area,
+        baseY: xy[0][1].toFixed(1),
+        lastX: xy[n - 1][0].toFixed(1), lastY: xy[n - 1][1].toFixed(1),
+        cor: up ? 'var(--brand-emerald)' : 'var(--brand-rose)'
+      };
+    },
 
     abrirDrawer: function(tipo, filtro, titulo) {
       var ops = this.opsComEfetivo;
