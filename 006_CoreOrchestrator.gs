@@ -68,6 +68,11 @@ const CoreOrchestrator = {
         exec: () => typeof orquestrarScreener !== 'undefined' ? orquestrarScreener() : console.warn("Motor 019 não carregado."),
         requer_token: false
       },
+      "ATUALIZAR_HISTORICO_PRECOS": {
+        nome: "Histórico de Preços (Spot 250D)",
+        exec: () => typeof orquestrarSyncHistoricoPrecos !== 'undefined' ? orquestrarSyncHistoricoPrecos() : console.warn("Motor 020 não carregado."),
+        requer_token: true
+      },
     };
   },
 

@@ -175,6 +175,60 @@ function lerAbaComoJSON(nomeAba) {
 }
 
 // ==========================================
+// 1b-2. HISTÓRICO DE PREÇOS (sob demanda — não entra em getAbasPesadas
+//        para não inflar o payload principal com N tickers x 250 dias)
+// ==========================================
+
+/**
+ * Retorna a série de fechamento (spot) de um ticker a partir de uma data,
+ * para alimentar o gráfico de evolução do spot no CardStrategiesBook.
+ * Alimentado pela aba HISTORICO_PRECOS_ATIVOS (motor 020_SyncHistoricoPrecos).
+ *
+ * @param {string} ticker  - ex: "PETR4"
+ * @param {string} desdeISO - "YYYY-MM-DD" (opcional). Sem filtro se omitido.
+ * @returns {Array<{data:string, fechamento:number}>} ordenado por data crescente.
+ *
+ * ⚠️ Lê com getValues() (não getDisplayValues()) de propósito: a coluna DATA
+ *    precisa ser comparada como Date para o filtro "desde". Cada Date é
+ *    convertida para string ISO plana ANTES de retornar — nunca devolve um
+ *    objeto Date cru pela fronteira do google.script.run (ele vira null).
+ */
+function getHistoricoSpotEstrutura(ticker, desdeISO) {
+  try {
+    if (!ticker) return [];
+    const ss    = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = getPlanilhaDinamica(ss, SYS_CONFIG.SHEETS.HIST_PRECOS);
+    if (!sheet) return [];
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return [];
+
+    const tickerAlvo = String(ticker).trim().toUpperCase();
+    const desde       = desdeISO ? new Date(desdeISO + 'T00:00:00') : null;
+
+    const valores = sheet.getRange(2, 1, lastRow - 1, 3).getValues(); // TICKER | DATA | FECHAMENTO
+    const out = [];
+    for (var i = 0; i < valores.length; i++) {
+      var row = valores[i];
+      if (String(row[0] || '').trim().toUpperCase() !== tickerAlvo) continue;
+      var d = row[1];
+      if (!(d instanceof Date) || isNaN(d.getTime())) continue;
+      if (desde && d.getTime() < desde.getTime()) continue;
+
+      var iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      out.push({ data: iso, fechamento: parseFloat(row[2]) || 0, _ts: d.getTime() });
+    }
+
+    out.sort(function(a, b) { return a._ts - b._ts; });
+    out.forEach(function(o) { delete o._ts; });
+    return out;
+  } catch (e) {
+    console.error('[getHistoricoSpotEstrutura] Erro para ' + ticker + ': ' + e.message);
+    return [];
+  }
+}
+
+// ==========================================
 // 1c. EXPORTAR CSV (Download de qualquer aba)
 // ==========================================
 

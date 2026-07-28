@@ -109,6 +109,17 @@
               </span>
             </div>
           </div>
+
+          <!-- Evolução do Spot desde a abertura da estrutura -->
+          <div style="margin-top:0.65rem;padding-top:0.55rem;border-top:1px solid var(--border-subtle);">
+            <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.3rem;">
+              Evolução do Spot desde {{ fmtDate(est.dataCriacao) }}
+            </div>
+            <div :id="'csb-chart-' + est.id" v-show="_temHistorico(est)" style="height:130px;"></div>
+            <div v-if="!_temHistorico(est)" style="height:130px;display:flex;align-items:center;justify-content:center;font-size:0.68rem;color:var(--text-muted);">
+              {{ _statusHistorico(est) }}
+            </div>
+          </div>
         </div>
 
         <!-- Tabela de Pernas -->
@@ -254,11 +265,34 @@ window.CardStrategiesBook = {
   },
 
   data: function() {
-    return { filtroAtivo: 'todas' };
+    return {
+      filtroAtivo: 'todas',
+      historicos: {},        // ticker -> [{data:'YYYY-MM-DD', fechamento:N}, ...] | 'erro'
+      historicoEmVoo: {}    // ticker -> true enquanto a busca está em andamento
+    };
   },
 
-  mounted:  function() { if (window.refreshIcons) window.refreshIcons(); },
-  updated:  function() { if (window.refreshIcons) window.refreshIcons(); },
+  mounted:  function() {
+    if (window.refreshIcons) window.refreshIcons();
+    var self = this;
+    this._onThemeChange = function() { self.$nextTick(function() { self._renderizarTodosGraficos(); }); };
+    window.addEventListener('themechange', this._onThemeChange);
+  },
+  updated:  function() {
+    if (window.refreshIcons) window.refreshIcons();
+    var self = this;
+    this.$nextTick(function() { self._renderizarTodosGraficos(); });
+  },
+  unmounted: function() {
+    if (this._onThemeChange) window.removeEventListener('themechange', this._onThemeChange);
+  },
+
+  watch: {
+    estrategias: {
+      immediate: true,
+      handler: function(ests) { this._garantirHistoricos(ests); }
+    }
+  },
 
   computed: {
     trades: function() {
@@ -414,10 +448,17 @@ window.CardStrategiesBook = {
       var dte     = pernas.reduce(function(min, p) { var v = typeof p.dteCorridos === 'number' ? p.dteCorridos : 999; return v < min ? v : min; }, 999);
 
       var pernasSorted = pernas.slice().sort(function(a, b) { return (a.strike || 0) - (b.strike || 0); });
+      // Data de criação da estrutura = a mais antiga entre as datas de abertura das pernas.
+      var dataCriacao = pernas.reduce(function(min, p) {
+        var d = p.dataTrade;
+        if (!(d instanceof Date) || isNaN(d.getTime())) return min;
+        return (!min || d.getTime() < min.getTime()) ? d : min;
+      }, null);
       return Object.assign({
         id:            id,
         ticker:        leg0.tickerAtivo || '--',
         vencimento:    leg0.dataVencimento || null,
+        dataCriacao:   dataCriacao,
         dte:           dte,
         tipoEstrutura: tipo,
         isSimples:     pernas.length === 1,
@@ -572,6 +613,119 @@ window.CardStrategiesBook = {
         premioLiquidoUnit:premioLiquidoUnit,
         margemBloqueada:  margemBloqueada
       };
+    },
+
+    // ── Gráfico de evolução do Spot (Plotly) ──────────────────────────────
+
+    // Dispara a busca do histórico (uma vez por ticker, nunca duas) sempre que
+    // a lista de estruturas mudar. O cache é por TICKER (não por estrutura),
+    // pois duas estruturas no mesmo ativo reaproveitam a mesma série.
+    _garantirHistoricos: function(ests) {
+      var self = this;
+      var tickers = {};
+      (ests || []).forEach(function(e) { if (e.ticker && e.ticker !== '--') tickers[e.ticker] = true; });
+
+      Object.keys(tickers).forEach(function(t) {
+        if (self.historicos[t] !== undefined || self.historicoEmVoo[t]) return;
+        if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+
+        self.historicoEmVoo[t] = true;
+        google.script.run
+          .withSuccessHandler(function(dados) {
+            self.historicoEmVoo[t] = false;
+            self.historicos[t] = (dados && dados.length > 0) ? dados : 'erro';
+            self.$nextTick(function() { self._renderizarTodosGraficos(); });
+          })
+          .withFailureHandler(function(err) {
+            self.historicoEmVoo[t] = false;
+            self.historicos[t] = 'erro';
+            console.warn('[CardStrategiesBook] Falha ao buscar histórico de ' + t + ':', err);
+          })
+          .getHistoricoSpotEstrutura(t);
+      });
+    },
+
+    // true quando já temos série suficiente (>= 2 pontos) para plotar esta estrutura
+    _temHistorico: function(est) {
+      var serie = this.historicos[est.ticker];
+      return Array.isArray(serie) && this._serieDesdeCreacao(est, serie).length >= 2;
+    },
+
+    _statusHistorico: function(est) {
+      var serie = this.historicos[est.ticker];
+      if (serie === undefined || this.historicoEmVoo[est.ticker]) return 'Carregando histórico...';
+      if (serie === 'erro' || !Array.isArray(serie)) return 'Histórico indisponível.';
+      return 'Histórico insuficiente ainda (estrutura muito recente).';
+    },
+
+    // Filtra a série completa do ticker para os pontos >= data de criação da estrutura
+    _serieDesdeCreacao: function(est, serieCompleta) {
+      if (!est.dataCriacao) return serieCompleta;
+      var desdeTs = new Date(est.dataCriacao.getFullYear(), est.dataCriacao.getMonth(), est.dataCriacao.getDate()).getTime();
+      return serieCompleta.filter(function(p) {
+        return new Date(p.data + 'T00:00:00').getTime() >= desdeTs;
+      });
+    },
+
+    _renderizarTodosGraficos: function() {
+      var self = this;
+      this.estrategiasFiltradas.forEach(function(est) { self._renderizarGrafico(est); });
+    },
+
+    _renderizarGrafico: function(est) {
+      if (typeof Plotly === 'undefined') return;
+      var el = document.getElementById('csb-chart-' + est.id);
+      if (!el) return;
+
+      var serieCompleta = this.historicos[est.ticker];
+      if (!Array.isArray(serieCompleta)) return;
+      var serie = this._serieDesdeCreacao(est, serieCompleta);
+      if (serie.length < 2) return;
+
+      var F = window.Formatador;
+      var cor = function(nome, fallback) { return F ? (F.cssVar(nome) || fallback) : fallback; };
+      var corLinha  = cor('--brand-indigo',  '#4f46e5');
+      var corMuted  = cor('--text-muted',    '#94a3b8');
+      var corGrid   = cor('--border-subtle', '#e2e8f0');
+      var corRose   = cor('--brand-rose',    '#e11d48');
+
+      var xs = serie.map(function(p) { return p.data; });
+      var ys = serie.map(function(p) { return p.fechamento; });
+
+      var traces = [{
+        x: xs, y: ys, type: 'scatter', mode: 'lines',
+        line: { color: corLinha, width: 2, shape: 'spline' },
+        fill: 'tozeroy',
+        fillcolor: corLinha + '1a',
+        hovertemplate: '%{x}<br>R$ %{y:.2f}<extra></extra>',
+        name: 'Spot'
+      }];
+
+      // Linha horizontal pontilhada por strike distinto (vermelho = venda, índigo = compra)
+      var shapes = [];
+      var strikesVistos = {};
+      (est.pernas || []).forEach(function(p) {
+        var k = p.strike;
+        if (strikesVistos[k]) return;
+        strikesVistos[k] = true;
+        shapes.push({
+          type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: p.strike, y1: p.strike,
+          line: { color: p.direcaoTrade === 'VENDA' ? corRose : corLinha, width: 1.25, dash: 'dot' }
+        });
+      });
+
+      var layout = {
+        margin: { t: 4, r: 6, b: 20, l: 44 },
+        height: 130,
+        showlegend: false,
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        xaxis: { showgrid: false, tickfont: { size: 9, color: corMuted }, nticks: 5 },
+        yaxis: { showgrid: true, gridcolor: corGrid, tickfont: { size: 9, color: corMuted }, tickprefix: 'R$ ' },
+        shapes: shapes
+      };
+
+      Plotly.newPlot(el, traces, layout, { displayModeBar: false, responsive: true });
     }
   }
 };

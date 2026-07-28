@@ -35,6 +35,8 @@ function onOpen(e) {
         .addItem('🔗 9. Ranking Correlação IBOV',             'SyncCorrelIbovRanking_Menu')
         .addSeparator()
         .addItem('🎯 10. Screener Quantitativo (Trava de Alta PUT)', 'ScreenerQuantitativo_Menu')
+        .addSeparator()
+        .addItem('📉 11. Histórico de Preços (Spot 250D)', 'SyncHistoricoPrecos_Menu')
         .addToUi();
   } catch (err) {
     console.warn("[onOpen] Interface indisponível.");
@@ -98,7 +100,8 @@ function doPost(e) {
       case "SyncM9M21Ranking_Menu": SyncM9M21Ranking_Menu(); break;
       case "SyncCorrelIbovRanking_Menu": SyncCorrelIbovRanking_Menu(); break;
       case "ScreenerQuantitativo_Menu": ScreenerQuantitativo_Menu(); break;
-      default: 
+      case "SyncHistoricoPrecos_Menu": SyncHistoricoPrecos_Menu(); break;
+      default:
         throw new Error(`A função '${payload.funcao}' não está mapeada no roteador.`);
     }
 
