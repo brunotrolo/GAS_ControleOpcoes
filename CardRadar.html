@@ -1170,32 +1170,32 @@ window.CardVencimentos = {
 
           <template v-else>
             <!-- Cabeçalho de colunas -->
-            <div style="display:flex;align-items:center;gap:0.75rem;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
-              <div style="flex:1;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Códigos das ações</div>
-              <div style="width:116px;text-align:center;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
-              <div style="width:88px;text-align:right;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Preço</div>
+            <div style="display:flex;align-items:center;gap:1rem;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
+              <div style="flex:0 1 200px;min-width:110px;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Códigos das ações</div>
+              <div style="flex:1 1 auto;min-width:80px;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
+              <div style="flex:0 0 92px;text-align:right;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Preço</div>
             </div>
 
             <!-- Linhas -->
             <div v-for="a in painelAcoes" :key="a.ticker"
-              style="display:flex;align-items:center;gap:0.75rem;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
+              style="display:flex;align-items:center;gap:1rem;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
               <!-- Ticker + nome -->
-              <div style="flex:1;min-width:0;">
+              <div style="flex:0 1 200px;min-width:110px;">
                 <div style="font-size:0.82rem;font-weight:800;color:var(--text-primary);letter-spacing:0.01em;">{{ a.ticker }}</div>
                 <div v-if="a.nome" style="font-size:0.62rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.nome }}</div>
               </div>
-              <!-- Sparkline -->
-              <div style="width:116px;flex-shrink:0;display:flex;justify-content:center;">
-                <svg v-if="a.spark" :viewBox="'0 0 ' + a.spark.W + ' ' + a.spark.H" :width="a.spark.W" :height="a.spark.H" style="display:block;overflow:visible;">
+              <!-- Sparkline (cresce para preencher a largura) -->
+              <div style="flex:1 1 auto;min-width:80px;position:relative;height:34px;">
+                <svg v-if="a.spark" :viewBox="'0 0 ' + a.spark.W + ' ' + a.spark.H" preserveAspectRatio="none" width="100%" height="34" style="display:block;">
                   <path :d="a.spark.area" :fill="a.spark.cor" fill-opacity="0.10" stroke="none"></path>
-                  <line x1="0" :y1="a.spark.baseY" :x2="a.spark.W" :y2="a.spark.baseY" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"></line>
-                  <path :d="a.spark.line" fill="none" :stroke="a.spark.cor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"></path>
-                  <circle :cx="a.spark.lastX" :cy="a.spark.lastY" r="2" :fill="a.spark.cor"></circle>
+                  <line x1="0" :y1="a.spark.baseY" :x2="a.spark.W" :y2="a.spark.baseY" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"></line>
+                  <path :d="a.spark.line" fill="none" :stroke="a.spark.cor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
                 </svg>
+                <span v-if="a.spark" :style="'position:absolute;right:1px;top:' + a.spark.lastPct + '%;transform:translateY(-50%);width:5px;height:5px;border-radius:50%;background:' + a.spark.cor + ';'"></span>
                 <span v-else style="font-size:0.6rem;color:var(--text-muted);">sem histórico</span>
               </div>
               <!-- Preço -->
-              <div style="width:88px;text-align:right;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--text-primary);white-space:nowrap;">{{ fmtPreco(a.preco) }}</div>
+              <div style="flex:0 0 92px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--text-primary);white-space:nowrap;">{{ fmtPreco(a.preco) }}</div>
             </div>
           </template>
 
@@ -1917,6 +1917,9 @@ window.CardRadar = {
     },
 
     // Geometria de um sparkline SVG a partir da série de fechamentos.
+    // O SVG é esticado horizontalmente (preserveAspectRatio=none) para
+    // preencher a coluna; por isso o ponto final é posicionado por % (lastPct)
+    // como marcador HTML, evitando virar elipse ao esticar.
     _calcSpark: function(serie) {
       if (!Array.isArray(serie) || serie.length < 2) return null;
       var W = 116, H = 30, pad = 3, n = serie.length;
@@ -1934,7 +1937,7 @@ window.CardRadar = {
       return {
         W: W, H: H, line: line, area: area,
         baseY: xy[0][1].toFixed(1),
-        lastX: xy[n - 1][0].toFixed(1), lastY: xy[n - 1][1].toFixed(1),
+        lastPct: ((xy[n - 1][1] / H) * 100).toFixed(1),
         cor: up ? 'var(--brand-emerald)' : 'var(--brand-rose)'
       };
     },
