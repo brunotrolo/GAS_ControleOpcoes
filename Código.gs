@@ -33,10 +33,9 @@ function onOpen(e) {
         .addItem('📊 7. Maiores Volumes em Opções',           'SyncHighestOptionsVolume_Menu')
         .addItem('📈 8. Ranking Tendência M9M21',             'SyncM9M21Ranking_Menu')
         .addItem('🔗 9. Ranking Correlação IBOV',             'SyncCorrelIbovRanking_Menu')
+        .addItem('📉 10. Histórico de Preços (Spot 250D)',    'SyncHistoricoPrecos_Menu')
         .addSeparator()
-        .addItem('🎯 10. Screener Quantitativo (Trava de Alta PUT)', 'ScreenerQuantitativo_Menu')
-        .addSeparator()
-        .addItem('📉 11. Histórico de Preços (Spot 250D)', 'SyncHistoricoPrecos_Menu')
+        .addItem('🎯 11. Screener Quantitativo (Trava de Alta PUT)', 'ScreenerQuantitativo_Menu')
         .addToUi();
   } catch (err) {
     console.warn("[onOpen] Interface indisponível.");
