@@ -115,9 +115,9 @@
             <div style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.3rem;">
               Evolução do Spot desde {{ fmtDate(est.dataCriacao) }}
             </div>
-            <div :id="'csb-chart-' + est.id" v-show="_temHistorico(est)" style="height:130px;"></div>
-            <div v-if="!_temHistorico(est)" style="height:130px;display:flex;align-items:center;justify-content:center;font-size:0.68rem;color:var(--text-muted);">
-              {{ _statusHistorico(est) }}
+            <div :id="'csb-chart-' + est.id" v-show="temHistorico(est)" style="height:130px;"></div>
+            <div v-if="!temHistorico(est)" style="height:130px;display:flex;align-items:center;justify-content:center;font-size:0.68rem;color:var(--text-muted);">
+              {{ statusHistorico(est) }}
             </div>
           </div>
         </div>
@@ -646,12 +646,12 @@ window.CardStrategiesBook = {
     },
 
     // true quando já temos série suficiente (>= 2 pontos) para plotar esta estrutura
-    _temHistorico: function(est) {
+    temHistorico: function(est) {
       var serie = this.historicos[est.ticker];
       return Array.isArray(serie) && this._serieDesdeCreacao(est, serie).length >= 2;
     },
 
-    _statusHistorico: function(est) {
+    statusHistorico: function(est) {
       var serie = this.historicos[est.ticker];
       if (serie === undefined || this.historicoEmVoo[est.ticker]) return 'Carregando histórico...';
       if (serie === 'erro' || !Array.isArray(serie)) return 'Histórico indisponível.';
