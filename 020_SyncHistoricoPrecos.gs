@@ -18,10 +18,8 @@
  *     via reescrita completa da aba (1 leitura + 1 gravação, nunca célula a célula).
  *
  * EXECUÇÃO DIÁRIA:
- *   Este motor não se autoagenda. Rode UMA VEZ a função
- *   HistoricoPrecos_ConfigurarTrigger() pelo editor do GAS para instalar o
- *   gatilho diário (todo dia, após o fechamento do pregão). Idempotente:
- *   não duplica o gatilho se já existir.
+ *   Este motor não se autoagenda — roda via menu, doPost (webhook) ou
+ *   incluído na sequência do CoreOrchestrator (Config_Global).
  *
  * INTEGRAÇÃO COM A INFRAESTRUTURA:
  *   000 → OplabService.getHistoricalData()
@@ -36,8 +34,7 @@ const HIST_PRECOS_CONFIG = {
   SHEET_NAME:       SYS_CONFIG.SHEETS.HIST_PRECOS,
   DIAS_BACKFILL:    250,  // histórico inicial p/ ticker novo
   DIAS_INCREMENTAL: 7,    // janela de segurança p/ ticker já conhecido
-  DIAS_RETENCAO:    260,  // poda o que passar disso (buffer acima dos 250 pedidos)
-  HORA_TRIGGER:     19    // instala o gatilho diário às 19h (após fechamento B3)
+  DIAS_RETENCAO:    260   // poda o que passar disso (buffer acima dos 250 pedidos)
 };
 
 const HIST_PRECOS_HEADERS = ['TICKER', 'DATA', 'FECHAMENTO'];
@@ -257,24 +254,6 @@ function _limparDadosHistoricoPrecos(sheet) {
   if (lastRow > 1) {
     sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
   }
-}
-
-// ─── Instalação do gatilho diário (rodar UMA VEZ pelo editor do GAS) ──────────
-// Idempotente: não duplica o gatilho se já existir um para esta função.
-function HistoricoPrecos_ConfigurarTrigger() {
-  var jaExiste = ScriptApp.getProjectTriggers().some(function(t) {
-    return t.getHandlerFunction() === 'orquestrarSyncHistoricoPrecos';
-  });
-  if (jaExiste) {
-    console.log('Gatilho diário para orquestrarSyncHistoricoPrecos já existe. Nada a fazer.');
-    return;
-  }
-  ScriptApp.newTrigger('orquestrarSyncHistoricoPrecos')
-    .timeBased()
-    .everyDays(1)
-    .atHour(HIST_PRECOS_CONFIG.HORA_TRIGGER)
-    .create();
-  console.log('Gatilho diário instalado: orquestrarSyncHistoricoPrecos às ' + HIST_PRECOS_CONFIG.HORA_TRIGGER + 'h.');
 }
 
 // ─── Teste de homologação ─────────────────────────────────────────────────────
