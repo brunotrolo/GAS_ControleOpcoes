@@ -1170,32 +1170,27 @@ window.CardVencimentos = {
 
           <template v-else>
             <!-- Cabeçalho de colunas -->
-            <div style="display:flex;align-items:center;gap:1rem;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
-              <div style="flex:0 0 200px;min-width:110px;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Códigos das ações</div>
-              <div style="flex:1 1 0;min-width:0;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
-              <div style="flex:0 0 92px;text-align:right;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Preço</div>
+            <div style="display:grid;grid-template-columns:minmax(110px,200px) 1fr 92px;align-items:center;gap:1rem;padding:0 0.5rem 0.4rem;border-bottom:1px solid var(--border-default);">
+              <div style="font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Códigos das ações</div>
+              <div style="font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Tendência</div>
+              <div style="text-align:right;font-size:0.55rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Preço</div>
             </div>
 
             <!-- Linhas -->
             <div v-for="a in painelAcoes" :key="a.ticker"
-              style="display:flex;align-items:center;gap:1rem;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
+              style="display:grid;grid-template-columns:minmax(110px,200px) 1fr 92px;align-items:center;gap:1rem;padding:0.55rem 0.5rem;border-bottom:1px solid var(--border-subtle);">
               <!-- Ticker + nome -->
-              <div style="flex:0 0 200px;min-width:110px;">
+              <div style="min-width:0;">
                 <div style="font-size:0.82rem;font-weight:800;color:var(--text-primary);letter-spacing:0.01em;">{{ a.ticker }}</div>
                 <div v-if="a.nome" style="font-size:0.62rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ a.nome }}</div>
               </div>
-              <!-- Sparkline (cresce para preencher a largura) -->
-              <div style="flex:1 1 0;min-width:0;position:relative;height:34px;overflow:visible;">
-                <svg v-if="a.spark" :viewBox="'0 0 ' + a.spark.W + ' ' + a.spark.H" preserveAspectRatio="none" style="position:absolute;top:0;left:0;right:0;bottom:0;width:100%;height:100%;display:block;">
-                  <path :d="a.spark.area" :fill="a.spark.cor" fill-opacity="0.10" stroke="none"></path>
-                  <line x1="0" :y1="a.spark.baseY" :x2="a.spark.W" :y2="a.spark.baseY" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"></line>
-                  <path :d="a.spark.line" fill="none" :stroke="a.spark.cor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
-                </svg>
-                <span v-if="a.spark" :style="'position:absolute;left:' + a.spark.lastXPct + '%;top:' + a.spark.lastPct + '%;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:' + a.spark.cor + ';z-index:1;'"></span>
+              <!-- Sparkline em canvas (ocupa toda a coluna 1fr) -->
+              <div style="min-width:0;height:34px;">
+                <canvas v-if="a.temGrafico" :id="'sparkcv-' + a.ticker" style="display:block;width:100%;height:34px;"></canvas>
                 <span v-else style="font-size:0.6rem;color:var(--text-muted);">sem histórico</span>
               </div>
               <!-- Preço -->
-              <div style="flex:0 0 92px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--text-primary);white-space:nowrap;">{{ fmtPreco(a.preco) }}</div>
+              <div style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:var(--text-primary);white-space:nowrap;">{{ fmtPreco(a.preco) }}</div>
             </div>
           </template>
 
@@ -1867,12 +1862,18 @@ window.CardRadar = {
 
   watch: {
     abaAtiva: function(nova) {
-      if (nova === 'acoes') this.carregarPainelAcoes();
+      if (nova === 'acoes') {
+        var self = this;
+        this.carregarPainelAcoes();
+        this.$nextTick(function() { self._desenharSparks(); });
+      }
     }
   },
 
   mounted: function() {
     this._initTooltipCR();
+    this._onResizeSparks = this._onResizeSparks.bind(this);
+    window.addEventListener('resize', this._onResizeSparks);
   },
 
   beforeUnmount: function() {
@@ -1881,6 +1882,7 @@ window.CardRadar = {
     document.removeEventListener('mouseover', this._crTipOver);
     document.removeEventListener('mouseout',  this._crTipOut);
     document.removeEventListener('scroll',    this._crTipHide, true);
+    window.removeEventListener('resize', this._onResizeSparks);
   },
 
   methods: {
@@ -1904,10 +1906,11 @@ window.CardRadar = {
       google.script.run
         .withSuccessHandler(function(dados) {
           var lista = Array.isArray(dados) ? dados : [];
-          lista.forEach(function(a) { a.spark = self._calcSpark(a.serie); });
+          lista.forEach(function(a) { a.temGrafico = Array.isArray(a.serie) && a.serie.length >= 2; });
           self.painelAcoes = lista;
           self.painelAcoesCarregado  = true;
           self.painelAcoesCarregando = false;
+          self.$nextTick(function() { self._desenharSparks(); });
         })
         .withFailureHandler(function(err) {
           self.painelAcoesCarregando = false;
@@ -1916,31 +1919,74 @@ window.CardRadar = {
         .getPainelAcoes();
     },
 
-    // Geometria de um sparkline SVG a partir da série de fechamentos.
-    // O SVG é esticado horizontalmente (preserveAspectRatio=none) para
-    // preencher a coluna; por isso o ponto final é posicionado por % (lastPct)
-    // como marcador HTML, evitando virar elipse ao esticar.
-    _calcSpark: function(serie) {
-      if (!Array.isArray(serie) || serie.length < 2) return null;
-      var W = 116, H = 30, padY = 3, n = serie.length;
+    // Redesenha todas as sparklines (canvas) — chamado após carga, ao abrir a
+    // aba e no resize da janela.
+    _desenharSparks: function() {
+      if (this.abaAtiva !== 'acoes') return;
+      var self = this;
+      this.painelAcoes.forEach(function(a) {
+        if (!a.temGrafico) return;
+        var cv = document.getElementById('sparkcv-' + a.ticker);
+        if (cv) self._drawSpark(cv, a.serie);
+      });
+    },
+
+    // Desenha uma sparkline num <canvas>, medindo a largura real em px.
+    // Canvas preenche o container por definição (largura = clientWidth medida),
+    // sem depender de o SVG resolver width:100% no contexto flex/grid.
+    _drawSpark: function(cv, serie) {
+      var F = window.Formatador;
+      var cssVar = function(nome, fb) { return (F && F.cssVar && F.cssVar(nome)) || fb; };
+      var cssW = cv.clientWidth || (cv.parentNode ? cv.parentNode.clientWidth : 0);
+      var cssH = 34, padY = 4;
+      if (cssW < 2) return;
+
+      var dpr = window.devicePixelRatio || 1;
+      cv.width  = Math.round(cssW * dpr);
+      cv.height = Math.round(cssH * dpr);
+      var ctx = cv.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+
+      var n = serie.length;
       var min = Math.min.apply(null, serie), max = Math.max.apply(null, serie);
       var range = (max - min) || 1;
-      var xy = serie.map(function(v, i) {
-        var x = (i / (n - 1)) * W;                              // sem padding horizontal → linha preenche a largura
-        var y = padY + (1 - (v - min) / range) * (H - 2 * padY);
-        return [x, y];
-      });
-      var pts  = xy.map(function(p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' L');
-      var line = 'M' + pts;
-      var area = 'M' + xy[0][0].toFixed(1) + ',' + H + ' L' + pts + ' L' + xy[n - 1][0].toFixed(1) + ',' + H + ' Z';
-      var up   = serie[n - 1] >= serie[0];
-      return {
-        W: W, H: H, line: line, area: area,
-        baseY:    xy[0][1].toFixed(1),
-        lastXPct: ((xy[n - 1][0] / W) * 100).toFixed(1),
-        lastPct:  ((xy[n - 1][1] / H) * 100).toFixed(1),
-        cor: up ? 'var(--brand-emerald)' : 'var(--brand-rose)'
-      };
+      var X = function(i) { return (i / (n - 1)) * cssW; };
+      var Y = function(v) { return padY + (1 - (v - min) / range) * (cssH - 2 * padY); };
+
+      var up  = serie[n - 1] >= serie[0];
+      var cor = up ? cssVar('--brand-emerald', '#059669') : cssVar('--brand-rose', '#e11d48');
+
+      // Área sob a linha
+      ctx.beginPath();
+      ctx.moveTo(0, cssH);
+      for (var i = 0; i < n; i++) ctx.lineTo(X(i), Y(serie[i]));
+      ctx.lineTo(cssW, cssH);
+      ctx.closePath();
+      ctx.globalAlpha = 0.10; ctx.fillStyle = cor; ctx.fill(); ctx.globalAlpha = 1;
+
+      // Base pontilhada (preço de partida)
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = cssVar('--border-strong', '#cbd5e1');
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, Y(serie[0])); ctx.lineTo(cssW, Y(serie[0])); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Linha
+      ctx.strokeStyle = cor; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(X(0), Y(serie[0]));
+      for (var j = 1; j < n; j++) ctx.lineTo(X(j), Y(serie[j]));
+      ctx.stroke();
+
+      // Ponto final
+      ctx.fillStyle = cor;
+      ctx.beginPath(); ctx.arc(cssW - 2.5, Y(serie[n - 1]), 2.5, 0, 2 * Math.PI); ctx.fill();
+    },
+
+    _onResizeSparks: function() {
+      var self = this;
+      clearTimeout(this._resizeTimer);
+      this._resizeTimer = setTimeout(function() { self._desenharSparks(); }, 150);
     },
 
     abrirDrawer: function(tipo, filtro, titulo) {
