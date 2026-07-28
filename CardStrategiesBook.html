@@ -672,8 +672,30 @@ window.CardStrategiesBook = {
       this.estrategiasFiltradas.forEach(function(est) { self._renderizarGrafico(est); });
     },
 
+    // Registra o locale pt-BR do Plotly (o bundle do CDN só traz en-US).
+    // Assim o tickformat '%d %b' rende "28 Jun", "12 Jul" em português.
+    _registrarLocalePlotly: function() {
+      if (this._localeRegistrado || typeof Plotly === 'undefined' || !Plotly.register) return;
+      try {
+        Plotly.register({
+          moduleType: 'locale',
+          name: 'pt-BR',
+          dictionary: {},
+          format: {
+            days:        ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'],
+            shortDays:   ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],
+            months:      ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'],
+            shortMonths: ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'],
+            date: '%d/%m/%Y'
+          }
+        });
+      } catch (e) { /* já registrado ou versão sem suporte — segue com en-US */ }
+      this._localeRegistrado = true;
+    },
+
     _renderizarGrafico: function(est) {
       if (typeof Plotly === 'undefined') return;
+      this._registrarLocalePlotly();
       var el = document.getElementById('csb-chart-' + est.id);
       if (!el) return;
 
@@ -695,6 +717,7 @@ window.CardStrategiesBook = {
       var traces = [{
         x: xs, y: ys, type: 'scatter', mode: 'lines',
         line: { color: corLinha, width: 2, shape: 'spline' },
+        xhoverformat: '%d/%m/%Y',
         hovertemplate: '%{x}<br>R$ %{y:.2f}<extra></extra>',
         name: 'Spot'
       }];
@@ -726,12 +749,13 @@ window.CardStrategiesBook = {
         showlegend: false,
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
-        xaxis: { showgrid: false, tickfont: { size: 8, color: corMuted }, nticks: 4 },
-        yaxis: { range: [minY - padY, maxY + padY], showgrid: true, gridcolor: corGrid, tickfont: { size: 8, color: corMuted }, tickprefix: 'R$ ', nticks: 4 },
+        // fixedrange: trava o gráfico (sem arrastar/zoom); tickformat sem ano
+        xaxis: { showgrid: false, tickfont: { size: 8, color: corMuted }, nticks: 4, tickformat: '%d %b', fixedrange: true },
+        yaxis: { range: [minY - padY, maxY + padY], showgrid: true, gridcolor: corGrid, tickfont: { size: 8, color: corMuted }, tickprefix: 'R$ ', nticks: 4, fixedrange: true },
         shapes: shapes
       };
 
-      Plotly.react(el, traces, layout, { displayModeBar: false, responsive: true });
+      Plotly.react(el, traces, layout, { displayModeBar: false, responsive: true, locale: 'pt-BR', scrollZoom: false });
     }
   }
 };
